@@ -8,26 +8,20 @@ equipped with common CTF tools.
 
 ```mermaid
 flowchart TD
-    Operator[Operator in Streamlit dashboard] --> CTFd[CTFd URL plus token or cookie]
-    CTFd --> API[CTFd API: list, details, files]
-    API --> Workspace[challenges/id-category-name/]
-    Workspace --> Prompt[metadata.json, PROMPT.md, state.json, files/]
-    Operator --> Image[Build ctf-ai-solver Docker image]
-    Operator --> Action{Start or Continue}
+    Dashboard --> CTFd[CTFd challenge list, details, files]
+    CTFd --> Workspace[metadata.json, PROMPT.md, state.json, files/]
+    Dashboard --> Image[Docker image]
+    Workspace --> Image
+    Image --> Container
+    Dashboard --> Action{Start or Continue}
     Action -->|Start Claude| ClaudeStart[claude -p PROMPT.md]
     Action -->|Start Codex| CodexStart[codex exec PROMPT.md]
-    Action -->|Continue Claude| ClaudeContinue[claude --continue plus follow-up /goal]
-    Action -->|Continue Codex| CodexContinue[codex exec resume --last plus follow-up /goal]
+    Action -->|Continue Claude| ClaudeContinue[claude --continue follow-up /goal]
+    Action -->|Continue Codex| CodexContinue[codex exec resume --last follow-up /goal]
     ClaudeStart --> Container[Per-challenge Docker container]
     CodexStart --> Container
     ClaudeContinue --> Container
     CodexContinue --> Container
-    Container --> Mount[/workspace bind mount plus persistent .agent-home/]
-    Mount --> Solve[Agent uses CTF tools, artifacts, and endpoints]
-    Solve --> Output[stream log plus last message]
-    Output --> State[state.json run status plus flag candidates]
-    State --> Dashboard[Dashboard status, activity, raw logs, flags]
-    Dashboard --> Operator
 ```
 
 ## The `/goal` Loop
@@ -46,10 +40,9 @@ across runs.
 `/goal Continue solving ...` prompt plus the follow-up text from the dashboard.
 Claude is invoked with `--continue`; Codex attempts `codex exec resume --last`
 when a prior Codex session exists and falls back to a fresh exec session
-otherwise. Each run streams output to `claude.log` or `codex.log`, writes a last
-message file, updates `state.json`, extracts flag-looking strings, and returns
-control to the dashboard. Repeat the continue loop until a flag is recovered,
-then use `Mark succeeded` if the agent found the flag but exited non-zero.
+otherwise.
+
+Candidate flags are identified in agent output using a regex and shown in the dashboard.
 
 ## Usage
 
