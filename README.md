@@ -4,6 +4,8 @@ Clank the Flag is a Streamlit dashboard for downloading CTFd challenges and
 solving them with Claude Code or Codex inside per-challenge Docker containers
 equipped with common CTF tools.
 
+![Dashboard](./image.png)
+
 ## Flow
 
 ```mermaid
