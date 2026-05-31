@@ -1,0 +1,37 @@
+# Local secrets and auth material
+.env
+.env.*
+!.env.example
+.codex/
+.agents/
+
+# Runtime challenge workspaces and agent output
+challenges/
+*.log
+*.tmp
+.ctf-harness-current-prompt.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs and package caches
+.venv/
+venv/
+env/
+.uv-cache/
+
+# Streamlit and local editor state
+.streamlit/secrets.toml
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

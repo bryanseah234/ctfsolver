@@ -1,0 +1,83 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    autoconf \
+    automake \
+    binutils \
+    binutils-multiarch \
+    binwalk \
+    build-essential \
+    ca-certificates \
+    checksec \
+    clang \
+    cmake \
+    curl \
+    exiftool \
+    file \
+    foremost \
+    g++-multilib \
+    gcc-multilib \
+    gdb \
+    gdbserver \
+    git \
+    hashcat \
+    imagemagick \
+    iproute2 \
+    iputils-ping \
+    john \
+    jq \
+    ltrace \
+    make \
+    nasm \
+    net-tools \
+    netcat-openbsd \
+    nmap \
+    nodejs \
+    npm \
+    patchelf \
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-pwntools \
+    python3-requests \
+    python3-venv \
+    ruby \
+    socat \
+    strace \
+    sudo \
+    tcpdump \
+    tmux \
+    tshark \
+    unzip \
+    vim \
+    wget \
+    whois \
+    xxd \
+    zip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
+    && for package in gobuster hydra nikto radare2 sqlmap wfuzz wordlists; do \
+        apt-get install -y --no-install-recommends "$package" || true; \
+    done \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g @anthropic-ai/claude-code @openai/codex
+RUN for gem in zsteg one_gadget seccomp-tools; do \
+        gem install "$gem" --no-document || true; \
+    done
+
+RUN if ! getent group 1000 >/dev/null; then groupadd -g 1000 ctf; fi \
+    && if ! id -u 1000 >/dev/null 2>&1; then useradd -u 1000 -g 1000 -m -s /bin/bash ctf; fi \
+    && usermod -l ctf "$(getent passwd 1000 | cut -d: -f1)" 2>/dev/null || true \
+    && usermod -d /home/ctf -m ctf 2>/dev/null || true \
+    && groupmod -n ctf "$(getent group 1000 | cut -d: -f1)" 2>/dev/null || true \
+    && echo "ctf ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ctf \
+    && chmod 0440 /etc/sudoers.d/ctf
+
+WORKDIR /workspace
+USER ctf
+
+CMD ["/bin/bash"]
