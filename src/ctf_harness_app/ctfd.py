@@ -5,6 +5,7 @@ import html
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -145,25 +146,38 @@ class CTFdClient:
         path_or_url: str,
         accept: str | None = None,
         authenticated: bool | None = None,
+        retries: int = 3,
     ) -> tuple[bytes, Any]:
         url = self.normalize_url(path_or_url)
         headers = self.headers_for(url, accept=accept, authenticated=authenticated)
         request = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                return response.read(), response.headers
-        except urllib.error.HTTPError as exc:
-            detail_body = exc.read()
-            detail = detail_body.decode("utf-8", errors="replace")[:500]
-            if (
-                authenticated is not False
-                and exc.code == 400
-                and "Missing x-amz-content-sha256" in detail
-            ):
-                return self.fetch_bytes(path_or_url, accept=accept, authenticated=False)
-            raise HarnessError(f"HTTP {exc.code} fetching {request.full_url}: {detail}") from exc
-        except urllib.error.URLError as exc:
-            raise HarnessError(f"Failed to fetch {request.full_url}: {exc.reason}") from exc
+        
+        last_exc: Exception | None = None
+        for attempt in range(retries):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    return response.read(), response.headers
+            except urllib.error.HTTPError as exc:
+                detail_body = exc.read()
+                detail = detail_body.decode("utf-8", errors="replace")[:500]
+                if (
+                    authenticated is not False
+                    and exc.code == 400
+                    and "Missing x-amz-content-sha256" in detail
+                ):
+                    return self.fetch_bytes(path_or_url, accept=accept, authenticated=False)
+                if exc.code not in {408, 429, 500, 502, 503, 504}:
+                    raise HarnessError(f"HTTP {exc.code} fetching {request.full_url}: {detail}") from exc
+                last_exc = HarnessError(f"HTTP {exc.code} fetching {request.full_url}: {detail}")
+            except urllib.error.URLError as exc:
+                last_exc = HarnessError(f"Failed to fetch {request.full_url}: {exc.reason}")
+            
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+
+        if last_exc:
+            raise last_exc
+        raise HarnessError(f"Failed to fetch {url} after {retries} attempts")
 
     def normalize_url(self, path_or_url: str) -> str:
         if re.match(r"^https?://", path_or_url):

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 import html
-import threading
+import sys
+import concurrent.futures
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 from typing import Any
 
 import streamlit as st
@@ -122,6 +125,11 @@ def set_detail_view(slug: str, view: str) -> None:
     st.session_state["detail_views"] = views
 
 
+@st.cache_resource
+def get_executor() -> concurrent.futures.ThreadPoolExecutor:
+    return concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix="ctf-harness")
+
+
 def run_background(name: str, fn: Any, *args: Any, **kwargs: Any) -> None:
     out = output_dir()
 
@@ -146,7 +154,7 @@ def run_background(name: str, fn: Any, *args: Any, **kwargs: Any) -> None:
         except Exception as exc:
             update_harness_state(out, operation=name, operation_status="failed", operation_error=str(exc))
 
-    threading.Thread(target=wrapped, daemon=True, name=f"ctf-harness-{name}").start()
+    get_executor().submit(wrapped)
 
 
 def status_label(challenge: dict[str, Any]) -> str:

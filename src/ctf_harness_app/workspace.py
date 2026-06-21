@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 import subprocess
 import textwrap
 import time
@@ -13,6 +14,8 @@ from .codex_stream import parse_codex_stream
 from .config import HARNESS_STATE_FILENAME, STATE_FILENAME
 from .ctfd import CTFdClient, Challenge, challenge_from_metadata, strip_html
 from .util import HarnessError, extract_flag_candidates, read_json, tail_text, utc_now, write_json
+
+logger = logging.getLogger(__name__)
 
 
 TOOLING_CONTEXT = """\
@@ -312,7 +315,10 @@ def active_container_names() -> set[str] | None:
             timeout=5,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
+        logger.warning("docker ps timed out during active_container_names reconciliation")
+        return None
+    except OSError:
         return None
     if completed.returncode != 0:
         return None
