@@ -1,144 +1,71 @@
-# Clank the Flag
-
-Clank the Flag is a Streamlit dashboard for downloading CTFd challenges and
-solving them with Claude Code or Codex inside per-challenge Docker containers
-equipped with common CTF tools.
+# Developer README
 
 ![Dashboard](./image.png)
 
-## Flow
+## 1. Project Overview
+This repository contains a local Streamlit dashboard and testing harness designed to bridge the gap between Capture The Flag (CTF) platforms and autonomous Large Language Model agents. It automates the extraction of challenges from CTFd, mounts them into isolated, tool-rich Docker containers, and manages the lifecycle of AI agents (Claude Code or Codex) attempting to solve them. Telemetry, active state tracking, and parsed execution logs are rendered in the frontend dashboard.
 
-```mermaid
-flowchart TD
-    Dashboard --> CTFd[CTFd challenge list, details, files]
-    CTFd --> Workspace[metadata.json, PROMPT.md, state.json, files/]
-    Dashboard --> Image[Docker image]
-    Workspace --> Image
-    Image --> Container
-    Dashboard --> Action{Start or Continue}
-    Action -->|Start Claude| ClaudeStart[claude -p PROMPT.md]
-    Action -->|Start Codex| CodexStart[codex exec PROMPT.md]
-    Action -->|Continue Claude| ClaudeContinue[claude --continue follow-up /goal]
-    Action -->|Continue Codex| CodexContinue[codex exec resume --last follow-up /goal]
-    ClaudeStart --> Container[Per-challenge Docker container]
-    CodexStart --> Container
-    ClaudeContinue --> Container
-    CodexContinue --> Container
-```
+## 2. Prerequisites
+Ensure the following tools are installed on the host system:
+- **Python**: `>=3.11`
+- **Docker Engine**: Required to build the custom `Dockerfile.ctf-tools` image and spawn per-challenge containers.
+- **uv**: Python package and project manager (recommended over standard `pip` for rapid virtual environment caching).
 
-## The `/goal` Loop
+## 3. Environment Configuration
+The application relies strictly on environment variables for API authentication and tooling preferences. You must copy the provided `.env.example` file to `.env` and populate the necessary rows.
 
-Every downloaded challenge gets a `PROMPT.md` generated from CTFd metadata,
-attachments, hints, tags, and connection info. The prompt starts with a `/goal`
-line such as `Solve the CTF challenge ... and recover the flag`, followed by
-tooling context and the expected final answer.
+| Variable | Description | Required For |
+| :--- | :--- | :--- |
+| `CTFD_TOKEN` | A long-lived access token generated from your CTFd instance. | Downloading CTFd challenges |
+| `CTFD_COOKIE` | Fallback session cookie (if token access is unavailable). | Downloading CTFd challenges |
+| `ANTHROPIC_API_KEY` | Your Anthropic platform API key. | Executing Claude |
+| `ANTHROPIC_AUTH_TOKEN`| OAuth token for Claude Code CLI. | Executing Claude (OAuth mode) |
+| `CLAUDE_CODE_OAUTH_TOKEN`| Alias for Anthropic Auth Token. | Executing Claude (OAuth mode) |
+| `CTF_HARNESS_CLAUDE_PARTIAL_MESSAGES` | Toggles live message streaming inside the UI (defaults to 1). | Claude UI telemetry |
+| `OPENAI_API_KEY` | Your OpenAI platform API key. | Executing Codex |
+| `CODEX_ACCESS_TOKEN` | Direct access token for the Codex engine. | Executing Codex |
+| `CTF_HARNESS_CODEX_MODEL`| Model override (defaults to `gpt-5.4`). | Executing Codex |
 
-`Start Claude` and `Start Codex` pass that prompt into the selected agent inside
-a Docker container. The challenge directory is mounted at `/workspace`, while
-`.agent-home/` inside the challenge workspace persists the agent home directory
-across runs.
+> **Note**: Do not commit the `.env` file to version control.
 
-`Continue Claude` and `Continue Codex` replace the initial prompt with a new
-`/goal Continue solving ...` prompt plus the follow-up text from the dashboard.
-Claude is invoked with `--continue`; Codex attempts `codex exec resume --last`
-when a prior Codex session exists and falls back to a fresh exec session
-otherwise.
+## 4. Installation & Setup
 
-Candidate flags are identified in agent output using a regex and shown in the dashboard.
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd <repository-directory>
+   ```
 
-## Usage
+2. **Synchronize dependencies:**
+   The project uses `uv` for lightning-fast dependency resolution. Run the following command to sync the virtual environment with `pyproject.toml` and `uv.lock`:
+   ```bash
+   uv sync
+   ```
 
+3. **Build the Docker Image:**
+   Before running any agents, build the necessary sandboxing image containing the required CTF binaries.
+   ```bash
+   docker build -t ctf-ai-solver:latest -f Dockerfile.ctf-tools .
+   ```
+
+4. **Environment Setup:**
+   ```bash
+   cp .env.example .env
+   # Open .env and add your respective tokens.
+   ```
+
+## 5. Usage & Testing
+
+### Running the Dashboard
+To boot the Streamlit application, execute the following from the root directory:
 ```bash
 uv run streamlit run streamlit_app.py
 ```
+*Navigate to the local URL (typically `http://localhost:8501`) provided in your terminal.*
 
-Open `http://127.0.0.1:8765`.
-
-From the dashboard you can:
-
-- Build the Docker image with common CTF tools and Claude Code.
-- Enter a CTFd URL and download challenges.
-- Start Claude for an individual challenge.
-- Start Codex for an individual challenge.
-- Continue prompting a specific challenge.
-- Monitor status, logs, final messages, and detected flag candidates.
-
-## Configuration
-
-The harness loads a local `.env` file if present. Do not commit `.env`,
-downloaded `challenges/`, logs, or agent homes.
-
+### Running the Test Suite
+The repository maintains a robust local test suite encompassing utilities, API retry mechanics, and workspace state generation. To run all tests and verify the system health:
 ```bash
-CTFD_TOKEN=...
-CTFD_COOKIE='session=...'
-
-ANTHROPIC_API_KEY=...
-ANTHROPIC_AUTH_TOKEN=...
-CTF_HARNESS_CLAUDE_PARTIAL_MESSAGES=1
-
-OPENAI_API_KEY=...
-CODEX_ACCESS_TOKEN=...
-OPENAI_OAUTH_TOKEN=...
-CTF_HARNESS_CODEX_MODEL=gpt-5.4
+uv run pytest -v
 ```
-
-### Claude Code
-
-If you have an Anthropic API key, use:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-If you use Claude Code subscription/OAuth auth instead, run this on the host:
-
-```bash
-claude setup-token
-```
-
-Put the resulting long-lived token in `.env` as:
-
-```bash
-ANTHROPIC_AUTH_TOKEN=...
-```
-
-When Claude starts in a challenge container, the harness passes
-`ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` through to Docker. The token value
-is masked in harness logs and challenge state.
-
-Claude runs with `--output-format stream-json` but does not request partial
-message deltas by default. This keeps long generated Bash commands and heredocs
-from filling `claude.log` with thousands of tiny `input_json_delta` records. Set
-`CTF_HARNESS_CLAUDE_PARTIAL_MESSAGES=1` only when you need those raw partial
-events for debugging.
-
-### Codex
-
-If you have an OpenAI API key, use:
-
-```bash
-OPENAI_API_KEY=sk-...
-```
-
-If you use ChatGPT subscription/OAuth auth instead, run this on the host:
-
-```bash
-codex login
-```
-
-The harness will copy `~/.codex/auth.json` into the per-challenge agent home
-before starting Docker.
-
-Alternatively, you can copy the access token from `~/.codex/auth.json` yourself
-and put it in `.env` as:
-
-```bash
-CODEX_ACCESS_TOKEN=...
-```
-
-In this case, the harness will run `codex login --with-access-token` inside the
-container.
-
-The harness passes `--model gpt-5.4` to Codex by default. If you have done KYC
-and have access to Trusted Access for Cyber, then GPT-5.5 is the better model.
-You can override the model choice with `CTF_HARNESS_CODEX_MODEL=...`.
+If you encounter `ModuleNotFoundError` during tests, ensure `pyproject.toml` has `pythonpath = ["src"]` defined in its `pytest.ini_options` block (which is enabled by default).
