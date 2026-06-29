@@ -291,6 +291,8 @@ def docker_command(challenge_dir: Path, inner_command: list[str], image: str = D
         "0:0",
         "--name",
         name,
+        "--label",
+        "com.docker.compose.project=ctfsolver",
         "--network",
         "host",
         "--cap-add",
